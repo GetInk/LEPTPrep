@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Reviewer to Flashcards & Quiz</title>
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white shadow-md py-6 px-4 text-center">
+        <h1 class="text-3xl font-bold tracking-tight">Reviewer Converter & Interactive Quiz</h1>
+        <p class="text-indigo-200 mt-1">Paste your reviewer text below to instantly generate flashcards and a custom quiz.</p>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-4xl">
+
+        <!-- Step 1: Input Reviewer -->
+        <section id="input-section" class="bg-white rounded-xl shadow-sm p-6 mb-8 border border-slate-100">
+            <h2 class="text-xl font-semibold mb-3 text-slate-700">1. Paste Your Reviewer</h2>
+            <p class="text-sm text-slate-500 mb-4">
+                Format your text with questions followed by answers (e.g., <code class="bg-slate-100 px-1 py-0.5 rounded text-indigo-600">1. What is Python? - A programming language</code> or use Q: / A: formats).
+            </p>
+            <textarea id="reviewer-input" rows="8" class="w-full p-4 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono text-sm" placeholder="1. What is the powerhouse of the cell? - Mitochondria
+2. Who wrote Hamlet? - William Shakespeare
+..."></textarea>
+            <button onclick="processReviewer()" class="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-lg transition shadow-sm">
+                Generate Flashcards & Quiz
+            </button>
+        </section>
+
+        <!-- Step 2: Interactive Modes (Hidden by default) -->
+        <div id="app-container" class="hidden space-y-8">
+            
+            <!-- Navigation Tabs -->
+            <div class="flex border-b border-slate-200">
+                <button onclick="switchTab('flashcard')" id="tab-flashcard" class="py-2 px-6 font-semibold border-b-2 border-indigo-600 text-indigo-600 focus:outline-none">Flashcards</button>
+                <button onclick="switchTab('quiz')" id="tab-quiz" class="py-2 px-6 font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-600 focus:outline-none">Interactive Quiz (<span id="quiz-item-count">0</span> Items)</button>
+            </div>
+
+            <!-- Flashcard Mode -->
+            <div id="view-flashcard" class="space-y-4">
+                <div class="flex justify-between items-center text-sm text-slate-500">
+                    <span id="fc-counter">Card 1 of 0</span>
+                    <span class="text-xs bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full font-medium">Click card to flip</span>
+                </div>
+                <!-- Card -->
+                <div onclick="flipCard()" class="bg-white w-full h-64 rounded-xl shadow-md border border-slate-200 flex items-center justify-center p-8 text-center cursor-pointer select-none transition-transform hover:scale-[1.01]">
+                    <div id="fc-content" class="text-xl font-medium text-slate-700">Loading...</div>
+                </div>
+                <!-- Controls -->
+                <div class="flex justify-between">
+                    <button onclick="prevCard()" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium px-5 py-2 rounded-lg shadow-sm">Previous</button>
+                    <button onclick="nextCard()" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium px-5 py-2 rounded-lg shadow-sm">Next</button>
+                </div>
+            </div>
+
+            <!-- Quiz Mode -->
+            <div id="view-quiz" class="hidden space-y-6">
+                <div id="quiz-questions-container" class="space-y-6">
+                    <!-- Dynamically injected questions will go here -->
+                </div>
+                <button onclick="submitQuiz()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-6 py-3 rounded-lg transition shadow-sm w-full">
+                    Submit Quiz & View Results
+                </button>
+                
+                <!-- Quiz Results Box -->
+                <div id="quiz-results" class="hidden bg-emerald-50 border border-emerald-200 rounded-xl p-6 text-center">
+                    <h3 class="text-2xl font-bold text-emerald-800 mb-2">Quiz Results</h3>
+                    <p id="score-text" class="text-lg text-emerald-700 font-semibold"></p>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Simple Script to handle parsing and interactivity -->
+    <script>
+        let flashcards = [];
+        let currentCardIndex = 0;
+        let isFlipped = false;
+
+        function processReviewer() {
+            const text = document.getElementById('reviewer-input').value.trim();
+            if (!text) {
+                alert('Please paste some reviewer text first.');
+                return;
+            }
+
+            // Simple line-by-line parsing looking for separators like '-', ':', or '?'
+            const lines = text.split('\n');
+            flashcards = [];
+
+            lines.forEach(line => {
+                let cleanLine = line.trim();
+                if (!cleanLine) return;
+
+                // Remove leading numbers like "1.", "1)", etc.
+                cleanLine = cleanLine.replace(/^(\d+[\.\)]\s*)/, '');
+
+                // Split by common delimiters like hyphens or dashes separating Q and A
+                let parts = cleanLine.split(/[-–—:]+/);
+                if (parts.length >= 2) {
+                    let question = parts[0].trim();
+                    let answer = parts.slice(1).join('-').trim();
+                    if (question && answer) {
+                        flashcards.push({ question, answer });
+                    }
+                }
+            });
+
+            if (flashcards.length === 0) {
+                alert('Could not parse any questions automatically. Make sure your lines include a question and an answer separated by a dash (-) or colon (:).');
+                return;
+            }
+
+            // Initialize UI views
+            currentCardIndex = 0;
+            isFlipped = false;
+            updateFlashcardUI();
+            buildQuizUI();
+
+            document.getElementById('quiz-item-count').innerText = flashcards.length;
+            document.getElementById('app-container').classList.remove('hidden');
+            document.getElementById('app-container').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // --- Flashcard Logic ---
+        function updateFlashcardUI() {
+            if (flashcards.length === 0) return;
+            isFlipped = false;
+            const card = flashcards[currentCardIndex];
+            document.getElementById('fc-content').innerText = card.question;
+            document.getElementById('fc-content').className = "text-xl font-medium text-slate-700";
+            document.getElementById('fc-counter').innerText = `Card ${currentCardIndex + 1} of ${flashcards.length}`;
+        }
+
+        function flipCard() {
+            if (flashcards.length === 0) return;
+            isFlipped = !isFlipped;
+            const card = flashcards[currentCardIndex];
+            const contentEl = document.getElementById('fc-content');
+            if (isFlipped) {
+                contentEl.innerText = card.answer;
+                contentEl.className = "text-xl font-semibold text-indigo-600";
+            } else {
+                contentEl.innerText = card.question;
+                contentEl.className = "text-xl font-medium text-slate-700";
+            }
+        }
+
+        function nextCard() {
+            if (currentCardIndex < flashcards.length - 1) {
+                currentCardIndex++;
+                updateFlashcardUI();
+            }
+        }
+
+        function prevCard() {
+            if (currentCardIndex > 0) {
+                currentCardIndex--;
+                updateFlashcardUI();
+            }
+        }
+
+        // --- Quiz Logic ---
+        function buildQuizUI() {
+            const container = document.getElementById('quiz-questions-container');
+            container.innerHTML = '';
+            document.getElementById('quiz-results').classList.add('hidden');
+
+            flashcards.forEach((item, index) => {
+                // Generate a few random incorrect choices from other answers
+                let choices = [item.answer];
+                while (choices.length < Math.min(4, flashcards.length)) {
+                    let randomAns = flashcards[Math.floor(Math.random() * flashcards.length)].answer;
+                    if (!choices.includes(randomAns)) {
+                        choices.push(randomAns);
+                    }
+                }
+                // Shuffle choices
+                choices.sort(() => Math.random() - 0.5);
+
+                let questionHtml = `
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 quiz-card" data-correct="${encodeURIComponent(item.answer)}">
+                        <p class="font-semibold text-slate-800 mb-3">${index + 1}. ${item.question}</p>
+                        <div class="space-y-2">
+                `;
+
+                choices.forEach((choice, cIdx) => {
+                    questionHtml += `
+                        <label class="flex items-center space-x-3 p-3 rounded-lg border border-slate-100 hover:bg-slate-50 cursor-pointer transition">
+                            <input type="radio" name="question-${index}" value="${encodeURIComponent(choice)}" class="text-indigo-600 focus:ring-indigo-500 h-4 w-4">
+                            <span class="text-slate-700 text-sm">${choice}</span>
+                        </label>
+                    `;
+                });
+
+                questionHtml += `</div></div>`;
+                container.innerHTML += questionHtml;
+            });
+        }
+
+        function submitQuiz() {
+            const cards = document.querySelectorAll('.quiz-card');
+            let score = 0;
+
+            cards.forEach((card, index) => {
+                const correctAnswer = decodeURIComponent(card.getAttribute('data-correct'));
+                const selectedInput = card.querySelector(`input[name="question-${index}"]:checked`);
+                
+                // Highlight styles
+                const labels = card.querySelectorAll('label');
+                labels.forEach(label => {
+                    const radio = label.querySelector('input');
+                    const val = decodeURIComponent(radio.value);
+                    if (val === correctAnswer) {
+                        label.classList.add('bg-emerald-50', 'border-emerald-300', 'font-medium');
+                    } else if (radio.checked) {
+                        label.classList.add('bg-rose-50', 'border-rose-300');
+                    }
+                });
+
+                if (selectedInput && decodeURIComponent(selectedInput.value) === correctAnswer) {
+                    score++;
+                }
+            });
+
+            const resultsBox = document.getElementById('quiz-results');
+            const scoreText = document.getElementById('score-text');
+            scoreText.innerText = `You scored ${score} out of ${flashcards.length} (${Math.round((score / flashcards.length) * 100)}%)`;
+            resultsBox.classList.remove('hidden');
+            resultsBox.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // --- Tab Switching ---
+        function switchTab(tab) {
+            const fcTab = document.getElementById('tab-flashcard');
+            const qzTab = document.getElementById('tab-quiz');
+            const fcView = document.getElementById('view-flashcard');
+            const qzView = document.getElementById('view-quiz');
+
+            if (tab === 'flashcard') {
+                fcTab.className = "py-2 px-6 font-semibold border-b-2 border-indigo-600 text-indigo-600 focus:outline-none";
+                qzTab.className = "py-2 px-6 font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-600 focus:outline-none";
+                fcView.classList.remove('hidden');
+                qzView.classList.add('hidden');
+            } else {
+                qzTab.className = "py-2 px-6 font-semibold border-b-2 border-indigo-600 text-indigo-600 focus:outline-none";
+                fcTab.className = "py-2 px-6 font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-600 focus:outline-none";
+                qzView.classList.remove('hidden');
+                fcView.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
