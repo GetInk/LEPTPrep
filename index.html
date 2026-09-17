@@ -23,8 +23,8 @@
             
             <!-- API Key Setting -->
             <div>
-                <label class="block text-sm font-medium text-slate-600 mb-1">Gemini / OpenAI API Key (For AI Question Generation)</label>
-                <input type="password" id="api-key" placeholder="Enter your API key here..." class="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm font-mono">
+                <label class="block text-sm font-medium text-slate-600 mb-1">OpenRouter API Key (For AI Question Generation)</label>
+                <input type="password" id="api-key" placeholder="Enter your OpenRouter API key here..." class="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm font-mono">
                 <p class="text-xs text-slate-400 mt-1">Your key stays locally in your browser and is only used to generate questions.</p>
             </div>
 
@@ -106,7 +106,7 @@
             reader.readAsArrayBuffer(file);
         }
 
-        // AI Generation Logic (Using Gemini API as primary brain example)
+        // AI Generation Logic (Using OpenRouter API)
         async function generateWithAI() {
             const apiKey = document.getElementById('api-key').value.trim();
             const text = document.getElementById('reviewer-input').value.trim();
@@ -116,7 +116,7 @@
                 return;
             }
             if (!apiKey) {
-                alert('Please provide your API key to let the AI analyze the reviewer.');
+                alert('Please provide your OpenRouter API key.');
                 return;
             }
 
@@ -134,17 +134,28 @@ Text to analyze:
 ${text}`;
 
             try {
-                // Calling Gemini 1.5 Flash API endpoint
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                // Calling OpenRouter API endpoint
+                const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                        'HTTP-Referer': window.location.origin,
+                        'X-Title': 'Reviewer App'
+                    },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }]
+                        model: "openrouter/free", 
+                        messages: [{ role: "user", content: prompt }]
                     })
                 });
 
                 const data = await response.json();
-                let rawText = data.candidates[0].content.parts[0].text;
+                
+                if (data.error) {
+                    throw new Error(data.error.message || "OpenRouter error");
+                }
+
+                let rawText = data.choices[0].message.content;
                 
                 // Clean up potential markdown formatting from response
                 rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -165,7 +176,7 @@ ${text}`;
 
             } catch (error) {
                 console.error(error);
-                alert("Failed to generate questions via AI. Check your API key and text length.");
+                alert("Failed to generate questions via AI: " + error.message);
             } finally {
                 btn.innerText = "Generate Smart Flashcards & Quiz via AI";
                 btn.disabled = false;
